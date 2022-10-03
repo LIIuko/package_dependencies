@@ -35,15 +35,17 @@ def get_file_dependencies_part2(link):
     text = page.text
     soup = BeautifulSoup(text, "html.parser")
     links_html = soup.find_all('a')
-
+    array = []
     for link_html in links_html:
-        if link_html.get('href') is not None and "setup.py" in link_html.get("href"):
-            return link_html.get("href")
-    return None
+        if link_html.get('href') is not None and (
+                "setup.py" in link_html.get("href") or "setup.cfg" in link_html.get("href")):
+            array.append(link_html.get("href"))
+    return array
 
 
 def get_file_dependencies(name_package):
     """Возвращает ссылку на файл с зависимостьями пакета"""
+    links = []
 
     link_part1 = get_file_dependencies_part1(name_package)
     if link_part1 is None:
@@ -56,9 +58,11 @@ def get_file_dependencies(name_package):
     if link_part2 is None:
         # print("Link 2 is none")
         return None
+    for link_2 in link_part2:
+        links.append(link_part1 + link_2.replace(repeated_part, "")[1:])
 
     # print(link_part1[:-1] + link_part2.replace(repeated_part, ""))
-    return link_part1 + link_part2.replace(repeated_part, "")[1:]
+    return links
 
 
 def get_name_packages(page_url):
@@ -71,34 +75,49 @@ def get_name_packages(page_url):
     text = page.text
     soup = BeautifulSoup(text, "html.parser")
 
-    name_packages = []
+    name_packages = set()
 
     flag = False
     body_fail = soup.find_all('tr')
     for line in body_fail:
-        if "]" in line.text:
+        if "]" in line.text or line.text is None:
             flag = False
         if flag:
-            first_index = line.text.find('"') + 1
-            last_index = line.text[first_index:].find(" ") + first_index
-            last_index = line.text[first_index:].find(">") + first_index if line.text[first_index:].find(" ") == -1 else last_index
-            name_packages.append(line.text[first_index:last_index].replace(";", ""))
-        if "install_requires=[" in line.text \
-                or "install_requires = [" in line.text \
-                or "requires = [" in line.text:
+            count = 0
+            for el in line.text:
+                if el == " " or el == "\n":
+                    count += 1
+                else:
+                    break
+            first_index = count
+            if line.text[first_index:].find(" ") != -1:
+                last_index = line.text[first_index:].find(" ") + first_index
+            elif line.text[first_index:].find(";") != -1:
+                last_index = line.text[first_index:].find(";") + first_index
+            elif line.text[first_index:].find(">") != -1:
+                last_index = line.text[first_index:].find(">") + first_index
+            else:
+                last_index = 0
+            name = line.text[first_index:last_index].replace(";", "").replace(" ", "").replace('"', "")
+            if "\n" in name or name == "":
+                continue
+            name_packages.add(name)
+        if "install_requires" in line.text or "requires = [" in line.text:
             flag = True
     return name_packages
 
 
 def work(package, tab):
-    url = get_file_dependencies(package)
-    if url is not None:
-        if get_name_packages(url) is not None:
-            for name in get_name_packages(url):
-                if name is None:
-                    continue
-                print("\t" * tab + package + " -> " + name)
-                work(name, tab + 1)
+    urls = get_file_dependencies(package)
+    if urls is not None:
+        for url in urls:
+            if url is not None:
+                if get_name_packages(url) is not None:
+                    for name in get_name_packages(url):
+                        if name is None:
+                            continue
+                        print("\t" * tab + package + " -> " + name)
+                        work(name, tab + 1)
 
 
 if __name__ == '__main__':
