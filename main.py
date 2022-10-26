@@ -122,5 +122,6 @@ def work(package, tab):
 
 if __name__ == '__main__':
     package = input("Введите название пакета для которого нужно вывести дерево зависимостей: ")
-    print(package)
+    print("digraph " + package + "{")
     work(package, 0)
+    print("}")
